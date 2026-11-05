@@ -5,7 +5,7 @@ import {
   verifySessionValue,
   isSameOrigin,
   takeRateLimit
-} from "../api/_security.js";
+} from "../lib/server-security.js";
 
 const secret = "test-session-secret-that-is-at-least-32-characters";
 
