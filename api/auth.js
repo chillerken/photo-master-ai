@@ -10,7 +10,7 @@ import {
   resetRateLimit,
   sendJson,
   takeRateLimit
-} from "./_security.js";
+} from "../lib/server-security.js";
 
 export default function handler(req, res) {
   if (req.method === "GET") {
