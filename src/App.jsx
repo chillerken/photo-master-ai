@@ -281,6 +281,19 @@ function ReportBody({ text, onCopy }) {
   )
 }
 
+function renderInlineText(value) {
+  const tokens = value.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g)
+  return tokens.map((token, index) => {
+    if (token.startsWith('**') && token.endsWith('**')) {
+      return <strong key={index}>{token.slice(2, -2)}</strong>
+    }
+    if (token.startsWith('*') && token.endsWith('*')) {
+      return <em key={index}>{token.slice(1, -1)}</em>
+    }
+    return token
+  })
+}
+
 function BodyText({ text }) {
   if (!text) return null
   const lines = text.split('\n')
@@ -288,12 +301,11 @@ function BodyText({ text }) {
     <div className="report-text">
       {lines.map((line, i) => {
         if (!line.trim()) return <br key={i} />
-        const clean = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>')
         if (line.match(/^[-*]\s/)) {
           return (
             <div key={i} className="report-bullet">
               <span className="report-bullet__dot">◆</span>
-              <span dangerouslySetInnerHTML={{ __html: clean.replace(/^[-*]\s/, '') }} />
+              <span>{renderInlineText(line.replace(/^[-*]\s/, ''))}</span>
             </div>
           )
         }
@@ -302,11 +314,11 @@ function BodyText({ text }) {
           return (
             <div key={i} className="report-num">
               <span className="report-num__n">{num}.</span>
-              <span dangerouslySetInnerHTML={{ __html: clean.replace(/^\d+\.\s/, '') }} />
+              <span>{renderInlineText(line.replace(/^\d+\.\s/, ''))}</span>
             </div>
           )
         }
-        return <p key={i} dangerouslySetInnerHTML={{ __html: clean }} />
+        return <p key={i}>{renderInlineText(line)}</p>
       })}
     </div>
   )
