@@ -5,7 +5,7 @@ import {
   parseBody,
   sendJson,
   takeRateLimit
-} from "./_security.js";
+} from "../lib/server-security.js";
 
 export const config = { maxDuration: 60 };
 
