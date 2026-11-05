@@ -8,26 +8,56 @@ function Toast({ message, show }) {
   return <div className={`toast ${show ? 'show' : ''}`}>{message}</div>
 }
 
-// ── API KEY BANNER ──────────────────────────────────────────────────────────
-function ApiBanner({ apiKey, onChange }) {
-  const masked = apiKey ? apiKey.slice(0, 7) + '···' + apiKey.slice(-4) : ''
-  const isValid = apiKey && apiKey.startsWith('sk-ant-') && apiKey.length > 30
+// ── SECURE ACCESS BANNER ───────────────────────────────────────────────────
+function AccessBanner({ authenticated, checking, onLogin, onLogout }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onLogin(password);
+      setPassword("");
+    } catch (err) {
+      setError(err.message || "Sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="api-banner">
-      <span className="api-banner__label">API Key</span>
-      <input
-        className="api-banner__input"
-        type="password"
-        placeholder="sk-ant-api03-···  (Anthropic API key)"
-        value={apiKey}
-        onChange={e => onChange(e.target.value)}
-        spellCheck={false}
-      />
-      <span className={`api-banner__status ${isValid ? 'ok' : apiKey ? 'err' : ''}`}>
-        {isValid ? '✓ Ready' : apiKey ? '⚠ Invalid key' : 'Enter key'}
-      </span>
+    <div className="api-banner access-banner">
+      <span className="api-banner__label">SECURE ACCESS</span>
+      {checking ? (
+        <span className="api-banner__status">Checking session…</span>
+      ) : authenticated ? (
+        <div className="access-banner__active">
+          <span className="api-banner__status ok">✓ Private session active · API key stays on server</span>
+          <button type="button" className="access-banner__button" onClick={onLogout}>Lock</button>
+        </div>
+      ) : (
+        <form className="access-banner__form" onSubmit={submit}>
+          <input
+            className="api-banner__input"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Private access password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            maxLength={256}
+            required
+          />
+          <button className="access-banner__button" type="submit" disabled={busy || !password}>
+            {busy ? "Unlocking…" : "Unlock Photo Master"}
+          </button>
+        </form>
+      )}
+      {error && <span className="access-banner__error" role="alert">{error}</span>}
     </div>
-  )
+  );
 }
 
 // ── UPLOAD ZONE ─────────────────────────────────────────────────────────────
@@ -59,7 +89,7 @@ function UploadZone({ image, onFile }) {
           <div className="upload-placeholder__title">Drop your portrait here</div>
           <div className="upload-placeholder__hint">
             or click to select<br />
-            <mark>JPG · PNG · WEBP · HEIC</mark>
+            <mark>JPG · PNG · WEBP · max 20 MB</mark>
           </div>
         </div>
       )}
@@ -298,9 +328,78 @@ function EmptyState() {
   )
 }
 
+async function compressImageToBase64(file) {
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("Please upload a JPG, PNG or WEBP image.");
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error("The original image is too large. Choose a file under 20 MB.");
+  }
+
+  let source = null;
+  let temporaryUrl = null;
+
+  try {
+    if (typeof createImageBitmap === "function") {
+      source = await createImageBitmap(file);
+    } else {
+      temporaryUrl = URL.createObjectURL(file);
+      source = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("The selected image could not be opened."));
+        img.src = temporaryUrl;
+      });
+    }
+
+    const sourceWidth = source.width || source.naturalWidth;
+    const sourceHeight = source.height || source.naturalHeight;
+    if (!sourceWidth || !sourceHeight) throw new Error("The selected image has invalid dimensions.");
+
+    const renderJpeg = async (maxDimension, quality) => {
+      const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Image compression is unavailable in this browser.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(source, 0, 0, canvas.width, canvas.height);
+      return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    };
+
+    let blob = await renderJpeg(2048, 0.82);
+    if (!blob) throw new Error("The image could not be prepared for analysis.");
+    if (blob.size > 3 * 1024 * 1024) {
+      blob = await renderJpeg(1600, 0.68);
+    }
+    if (!blob || blob.size > 3 * 1024 * 1024) {
+      throw new Error("The compressed image is still too large. Choose a smaller image.");
+    }
+
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const value = String(reader.result || "");
+        const separator = value.indexOf(",");
+        if (separator < 0) reject(new Error("Could not read the compressed image."));
+        else resolve(value.slice(separator + 1));
+      };
+      reader.onerror = () => reject(new Error("Could not read the compressed image."));
+      reader.readAsDataURL(blob);
+    });
+  } finally {
+    if (source && typeof source.close === "function") source.close();
+    if (temporaryUrl) URL.revokeObjectURL(temporaryUrl);
+  }
+}
+
 // ── ROOT APP ─────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [apiKey, setApiKey]           = useState(() => localStorage.getItem('pmai_key') || '')
+  const [authState, setAuthState]     = useState('checking')
   const [image, setImage]             = useState(null)
   const [imageBase64, setImageBase64] = useState(null)
   const [imageType, setImageType]     = useState('image/jpeg')
@@ -312,11 +411,59 @@ export default function App() {
   const [stepIndex, setStepIndex]     = useState(0)
   const [toast, setToast]             = useState({ show: false, msg: '' })
   const stepTimerRef                  = useRef(null)
+  const uploadSequenceRef              = useRef(0)
 
-  // Persist API key
+  // Remove the old browser-stored key and restore the server session.
   useEffect(() => {
-    if (apiKey) localStorage.setItem('pmai_key', apiKey)
-  }, [apiKey])
+    try { localStorage.removeItem("pmai_key"); } catch {}
+    let active = true;
+    fetch("/api/auth", { credentials: "same-origin", cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Session check failed.");
+        return data;
+      })
+      .then((data) => {
+        if (active) setAuthState(data.authenticated ? "authenticated" : "anonymous");
+      })
+      .catch(() => {
+        if (active) setAuthState("anonymous");
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (image) URL.revokeObjectURL(image);
+    };
+  }, [image]);
+
+  const handleLogin = async (password) => {
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "login", password })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Sign-in failed.");
+    setAuthState("authenticated");
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" })
+      });
+    } finally {
+      setAuthState("anonymous");
+      setResult(null);
+      setStatus("idle");
+    }
+  };
 
   const showToast = (msg) => {
     setToast({ show: true, msg })
@@ -327,24 +474,46 @@ export default function App() {
     navigator.clipboard.writeText(text).then(() => showToast('✦ Copied to clipboard'))
   }, [])
 
-  const handleFile = useCallback((file) => {
-    setImage(URL.createObjectURL(file))
-    setImageType(file.type || 'image/jpeg')
-    setResult(null)
-    setError(null)
-    setStatus('idle')
-    const reader = new FileReader()
-    reader.onload = e => setImageBase64(e.target.result.split(',')[1])
-    reader.readAsDataURL(file)
-  }, [])
+  const handleFile = useCallback(async (file) => {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Please upload a JPG, PNG or WEBP image.");
+      setStatus("error");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setError("The original image is too large. Choose a file under 20 MB.");
+      setStatus("error");
+      return;
+    }
+
+    const requestId = ++uploadSequenceRef.current;
+    setImage(URL.createObjectURL(file));
+    setImageBase64(null);
+    setImageType("image/jpeg");
+    setResult(null);
+    setError(null);
+    setStatus("idle");
+
+    try {
+      const encoded = await compressImageToBase64(file);
+      if (requestId === uploadSequenceRef.current) setImageBase64(encoded);
+    } catch (err) {
+      if (requestId === uploadSequenceRef.current) {
+        setError(err.message || "Could not prepare this image.");
+        setStatus("error");
+      }
+    }
+  }, []);
 
   const handleClear = () => {
-    setImage(null)
-    setImageBase64(null)
-    setResult(null)
-    setError(null)
-    setStatus('idle')
-  }
+    uploadSequenceRef.current += 1;
+    setImage(null);
+    setImageBase64(null);
+    setResult(null);
+    setError(null);
+    setStatus("idle");
+  };
 
   const startStepAnimation = () => {
     setStepIndex(0)
@@ -362,8 +531,8 @@ export default function App() {
 
   const handleEnhance = async () => {
     if (!imageBase64) return
-    if (!apiKey || !apiKey.startsWith('sk-ant-')) {
-      setError('Please enter a valid Anthropic API key (starts with sk-ant-)')
+    if (authState !== 'authenticated') {
+      setError('Unlock Photo Master AI before starting an analysis.')
       return
     }
 
@@ -372,22 +541,20 @@ export default function App() {
     setResult(null)
     startStepAnimation()
 
-    const styleLabel = STYLES.find(s => s.id === style)?.name || 'Auto AI'
-
     try {
-      const text = await analyzePhoto({ imageBase64, imageType, style, styleLabel, opts, apiKey })
+      const text = await analyzePhoto({ imageBase64, imageType, style, opts })
       stopStepAnimation()
       setResult(text)
       setStatus('done')
     } catch (err) {
       stopStepAnimation()
+      if (err.status === 401) setAuthState('anonymous')
       setError(err.message)
       setStatus('error')
     }
   }
 
   const styleLabel = STYLES.find(s => s.id === style)?.name || 'Auto AI'
-  const isValid = apiKey && apiKey.startsWith('sk-ant-') && apiKey.length > 30
 
   return (
     <>
@@ -405,10 +572,11 @@ export default function App() {
       </header>
 
       {/* API KEY BANNER */}
-      <ApiBanner apiKey={apiKey} onChange={setApiKey} />
+      <AccessBanner authenticated={authState === 'authenticated'} checking={authState === 'checking'} onLogin={handleLogin} onLogout={handleLogout} />
 
       {/* MAIN LAYOUT */}
-      <div className="layout">
+      {authState === 'authenticated' ? (
+        <div className="layout">
 
         {/* LEFT */}
         <div className="left-panel">
@@ -431,7 +599,7 @@ export default function App() {
           <button
             className="btn-enhance"
             onClick={handleEnhance}
-            disabled={!imageBase64 || !isValid || status === 'loading'}
+            disabled={!imageBase64 || authState !== 'authenticated' || status === 'loading'}
           >
             {status === 'loading' ? '⟳   Processing Portrait…' : '✦   Enhance & Analyze'}
           </button>
@@ -493,6 +661,19 @@ export default function App() {
           )}
         </div>
       </div>
+      ) : (
+        <section className="access-gate">
+          <div className="access-gate__card">
+            <div className="access-gate__eyebrow">PRIVATE WORKSPACE</div>
+            <h2>Unlock Photo Master AI</h2>
+            <p>Enter your private access password above. Your Anthropic API key stays on the server and is never sent to this browser.</p>
+            <div className="access-gate__note">
+              {authState === 'checking' ? 'Checking your secure session…' : 'Protected by a signed, eight-hour session.'}
+            </div>
+          </div>
+        </section>
+      )}
+
 
       {/* FOOTER */}
       <footer className="footer">
