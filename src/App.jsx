@@ -96,7 +96,7 @@ function UploadZone({ image, onFile }) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         style={{ display: 'none' }}
         onChange={e => handleFile(e.target.files[0])}
       />
