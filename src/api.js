@@ -1,37 +1,26 @@
-import { SYSTEM_PROMPT, buildPrompt } from './constants.js'
+export async function analyzePhoto({ imageBase64, imageType, style, opts }) {
+  const response = await fetch("/api/analyze", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageBase64, imageType, style, opts })
+  });
 
-export async function analyzePhoto({ imageBase64, imageType, style, styleLabel, opts, apiKey }) {
-  const userPrompt = buildPrompt(styleLabel, opts)
+  const data = await response.json().catch(() => ({}));
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: imageType, data: imageBase64 }
-          },
-          { type: 'text', text: userPrompt }
-        ]
-      }]
-    })
-  })
+  if (response.status === 401) {
+    const error = new Error("Your session has expired. Please sign in again.");
+    error.status = 401;
+    throw error;
+  }
 
-  const data = await response.json()
-  if (data.error) throw new Error(data.error.message)
+  if (!response.ok) {
+    throw new Error(data.error || "Photo analysis failed. Please try again.");
+  }
 
-  const text = data.content?.find(b => b.type === 'text')?.text
-  if (!text) throw new Error('No response from AI. Please try again.')
-  return text
+  if (typeof data.text !== "string" || !data.text.trim()) {
+    throw new Error("The AI returned an empty response. Please try again.");
+  }
+
+  return data.text;
 }
