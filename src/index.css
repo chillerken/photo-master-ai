@@ -924,3 +924,109 @@ body::after {
   color: var(--gold);
   opacity: 0.4;
 }
+
+
+/* ── SECURE ACCESS ── */
+.access-banner {
+  align-items: center;
+}
+
+.access-banner__form,
+.access-banner__active {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: min(100%, 320px);
+}
+
+.access-banner__button {
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  background: rgba(201,168,76,0.1);
+  color: var(--gold);
+  padding: 0.58rem 0.9rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.access-banner__button:hover:not(:disabled) {
+  background: rgba(201,168,76,0.18);
+  border-color: var(--gold);
+}
+
+.access-banner__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.access-banner__error {
+  flex-basis: 100%;
+  color: var(--red);
+  font-size: 0.65rem;
+}
+
+.access-gate {
+  min-height: 48vh;
+  display: grid;
+  place-items: center;
+  padding: 3rem 1.5rem;
+  animation: fadeIn 0.5s ease both;
+}
+
+.access-gate__card {
+  width: min(100%, 620px);
+  padding: clamp(2rem, 5vw, 3.5rem);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--gold);
+  border-radius: var(--radius);
+  background: var(--bg2);
+  text-align: center;
+}
+
+.access-gate__eyebrow {
+  color: var(--gold);
+  font-size: 0.6rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.access-gate__card h2 {
+  color: var(--text);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 400;
+  margin: 0 0 1rem;
+}
+
+.access-gate__card p {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.9;
+  margin: 0 auto;
+  max-width: 440px;
+}
+
+.access-gate__note {
+  color: var(--text-faint);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .access-banner__form,
+  .access-banner__active {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .access-banner__form .api-banner__input {
+    min-width: 100%;
+  }
+}
