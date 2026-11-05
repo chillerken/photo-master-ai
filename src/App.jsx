@@ -73,7 +73,9 @@ function UploadZone({ image, onFile }) {
   return (
     <div
       className={`upload-zone ${drag ? 'upload-zone--drag' : ''}`}
-      onClick={() => inputRef.current.click()}
+      onClick={e => {
+        if (e.target !== inputRef.current) inputRef.current?.click();
+      }}
       onDragOver={e => { e.preventDefault(); setDrag(true) }}
       onDragLeave={() => setDrag(false)}
       onDrop={e => { e.preventDefault(); setDrag(false); handleFile(e.dataTransfer.files[0]) }}
@@ -98,7 +100,11 @@ function UploadZone({ image, onFile }) {
         type="file"
         accept="image/jpeg,image/png,image/webp"
         style={{ display: 'none' }}
-        onChange={e => handleFile(e.target.files[0])}
+        onClick={e => e.stopPropagation()}
+        onChange={e => {
+          handleFile(e.target.files[0]);
+          e.target.value = "";
+        }}
       />
     </div>
   )
